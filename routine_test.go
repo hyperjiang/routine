@@ -1,6 +1,7 @@
 package routine
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -46,5 +47,62 @@ func TestRoutine(t *testing.T) {
 	}
 	if sum != total {
 		t.Errorf("sum = %v, want %v", sum, total)
+	}
+}
+
+func TestRoutineDemo(t *testing.T) {
+	total, goNum, size := 90741, 10, 1000
+
+	rt := New(total, goNum, size)
+	fmt.Printf("%+v\n", rt)
+
+	type processResult struct {
+		Index      int
+		ProcessNum int
+	}
+	var process = func(p Processor) ProcessResult {
+		fmt.Printf("index: %d, offset: %d, size: %d, total: %d\n", p.Index, p.Offset, p.Size, p.Total)
+
+		processNum := 0
+		offset := p.Offset
+		limit := 1000
+		maxOffset := p.Offset + p.Size
+		if maxOffset > p.Total {
+			maxOffset = p.Total
+		}
+
+		for offset < maxOffset {
+			if offset+limit > maxOffset {
+				limit = maxOffset - offset
+			}
+
+			sql := "select * from some_table limit %d, offset %d\n"
+			fmt.Printf(sql, limit, offset)
+
+			offset += limit
+			processNum += limit
+		}
+
+		result := &processResult{
+			Index:      p.Index,
+			ProcessNum: processNum,
+		}
+
+		return result
+	}
+
+	var count int
+	res := rt.Wait(process)
+	for _, v := range res {
+		r := v.(*processResult)
+		count += r.ProcessNum
+
+		if r.Index == 9 && r.ProcessNum != 9066 { // the last goroutine
+			t.Errorf("processNum = %v, want %v", r.ProcessNum, 9066)
+		}
+	}
+
+	if count != total {
+		t.Errorf("count = %v, want %v", count, total)
 	}
 }

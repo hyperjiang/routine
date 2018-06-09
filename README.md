@@ -1,4 +1,4 @@
-# Read flags from config file
+# Helper for run goroutines
 
 [![GoDoc](https://godoc.org/github.com/hyperjiang/routine?status.svg)](https://godoc.org/github.com/hyperjiang/routine)
 [![Build Status](https://travis-ci.org/hyperjiang/routine.svg?branch=master)](https://travis-ci.org/hyperjiang/routine)
@@ -12,7 +12,7 @@
 go get -u github.com/hyperjiang/routine
 ```
 
-## Usage
+## Usage example
 
 ```
 package main
@@ -25,29 +25,53 @@ import (
 
 func main() {
 
-	total, max, size := 10000, 10, 1000
+	total, goNum, size := 90741, 10, 1000
 
-	r := routine.New(total, max, size)
+	rt := routine.New(total, goNum, size)
+	fmt.Printf("%+v\n", rt)
 
-	fmt.Println(r)
-
+	type processResult struct {
+		Index      int
+		ProcessNum int
+	}
 	var process = func(p routine.Processor) routine.ProcessResult {
-		fmt.Printf("index: %d, offset: %d, size: %d\n", p.Index, p.Offset, p.Size)
+		fmt.Printf("index: %d, offset: %d, size: %d, total: %d\n", p.Index, p.Offset, p.Size, p.Total)
 
-		type rs struct {
-			Index     int
-			Processed int
+		processNum := 0
+		offset := p.Offset
+		limit := 1000
+		maxOffset := p.Offset + p.Size
+		if maxOffset > p.Total {
+			maxOffset = p.Total
 		}
 
-		processed := p.Size
-		if (p.Index+1)*p.Size > p.Total {
-			processed = p.Total - p.Index*p.Size
+		for offset < maxOffset {
+			if offset+limit > maxOffset {
+				limit = maxOffset - offset
+			}
+
+			sql := "select * from some_table limit %d, offset %d\n"
+			fmt.Printf(sql, limit, offset)
+
+			offset += limit
+			processNum += limit
 		}
 
-		return rs{Index: p.Index, Processed: processed}
+		result := &processResult{
+			Index:      p.Index,
+			ProcessNum: processNum,
+		}
+
+		return result
 	}
 
-	res := r.Wait(process)
-	fmt.Println(res)
+	var count int
+	res := rt.Wait(process)
+	for _, v := range res {
+		r := v.(*processResult)
+		count += r.ProcessNum
+	}
+
+	fmt.Printf("total: %d\n", count)
 }
 ```

@@ -2,7 +2,6 @@ package routine
 
 import (
 	"math"
-	"sync"
 )
 
 // Routine - the struct of goroutines
@@ -26,7 +25,8 @@ type ProcessResult interface{}
 // ProcessFunc - the process function
 type ProcessFunc func(p Processor) ProcessResult
 
-// New - get a new routine
+// New - get a new routine, note that the goroutine number and record number per goroutine
+// is calculated dynamically, and probably will not equal to the input
 func New(totalRecords, maxGoNum, maxSizePerGo int) *Routine {
 	num := math.Ceil(float64(totalRecords) / float64(maxSizePerGo))
 	goNum := int(math.Min(num, float64(maxGoNum)))
@@ -39,28 +39,23 @@ func (r *Routine) Wait(f ProcessFunc) []ProcessResult {
 
 	var result []ProcessResult
 
-	var wg sync.WaitGroup
-	wg.Add(r.GoNum)
-
-	m := sync.Mutex{}
+	var ch = make(chan ProcessResult, r.GoNum)
 
 	for i := 0; i < r.GoNum; i++ {
 		go func(i int) {
-			defer wg.Done()
-
-			m.Lock()
 			p := Processor{
 				Index:  i,
 				Size:   r.Size,
 				Offset: i * r.Size,
 				Total:  r.Total,
 			}
-			result = append(result, f(p))
-			m.Unlock()
+			ch <- f(p)
 		}(i)
 	}
 
-	wg.Wait()
+	for i := 0; i < r.GoNum; i++ {
+		result = append(result, <-ch)
+	}
 
 	return result
 }
